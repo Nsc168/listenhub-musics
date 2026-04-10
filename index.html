@@ -568,6 +568,21 @@
   }
   .history-track-row a:hover { background: var(--accent); color: #0a0a0a; }
 
+  .history-delete-btn {
+    margin-top: 12px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    background: none;
+    border: 1px solid var(--accent2);
+    color: var(--accent2);
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .history-delete-btn:hover { background: var(--accent2); color: #fff; }
+  .history-delete-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
   /* Download button */
   .download-btn {
     display: inline-block;
@@ -598,6 +613,35 @@
     letter-spacing: 0.05em;
     text-align: center;
   }
+
+  /* Credits bar */
+  .credits-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    margin-bottom: 4px;
+  }
+  .credits-item {
+    background: var(--surface);
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .credits-label {
+    font-size: 8px;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .credits-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+  }
+  .credits-value.warn { color: var(--accent2); }
 
   /* Login */
   .login-btn {
@@ -734,6 +778,28 @@
         <div class="token-dot connected"></div>
         <span id="userLabel" style="flex:1;font-size:12px;color:var(--text)">Logged in</span>
         <button onclick="logout()">LOG OUT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Credits bar -->
+  <div id="creditsBar" style="display:none;margin-bottom:20px">
+    <div class="credits-bar">
+      <div class="credits-item">
+        <div class="credits-label">PLAN</div>
+        <div class="credits-value" id="creditsPlan">—</div>
+      </div>
+      <div class="credits-item">
+        <div class="credits-label">CREDITS</div>
+        <div class="credits-value" id="creditsAvail">—</div>
+      </div>
+      <div class="credits-item">
+        <div class="credits-label">AUDIO LEFT</div>
+        <div class="credits-value" id="creditsAudio">—</div>
+      </div>
+      <div class="credits-item">
+        <div class="credits-label">RESETS</div>
+        <div class="credits-value" id="creditsReset">—</div>
       </div>
     </div>
   </div>
@@ -928,6 +994,46 @@
     } catch {
       showLoggedIn('Logged in');
     }
+    fetchSubscription();
+  }
+
+  async function fetchSubscription() {
+    try {
+      const sub = await apiGet('/v1/users/subscription');
+      const bar = document.getElementById('creditsBar');
+      bar.style.display = 'block';
+
+      // Plan name
+      const planName = sub.subscriptionPlan?.name || (sub.paidStatus ? 'Pro' : 'Free');
+      document.getElementById('creditsPlan').textContent = planName;
+
+      // Total available credits
+      const avail = sub.totalAvailableCredits ?? sub.usageAvailableMonthlyCredits ?? '—';
+      const total = sub.usageTotalMonthlyCredits ?? '—';
+      const availEl = document.getElementById('creditsAvail');
+      availEl.textContent = avail + (total !== '—' ? '/' + total : '');
+      if (typeof avail === 'number' && typeof total === 'number' && avail / total < 0.2) {
+        availEl.classList.add('warn');
+      }
+
+      // Audio generation remaining
+      const audioAvail = sub.usageAudioGenerateAvailableAmount ?? '—';
+      const audioUsed = sub.usageAudioGenerateUsedAmount ?? 0;
+      const audioEl = document.getElementById('creditsAudio');
+      audioEl.textContent = typeof audioAvail === 'number' ? audioAvail : '—';
+      if (typeof audioAvail === 'number' && audioAvail < 5) audioEl.classList.add('warn');
+
+      // Reset date
+      const resetEl = document.getElementById('creditsReset');
+      if (sub.resetAt) {
+        const d = new Date(sub.resetAt);
+        resetEl.textContent = (d.getMonth()+1) + '/' + d.getDate();
+      } else {
+        resetEl.textContent = '—';
+      }
+    } catch (err) {
+      console.log('Subscription fetch failed:', err.message);
+    }
   }
 
   function showLoggedOut() {
@@ -1073,19 +1179,69 @@
     loadHistory(next);
   }
 
+  async function deleteTask(taskId, btn) {
+    if (!confirm('Delete this track from the server?')) return;
+    btn.disabled = true;
+    btn.textContent = 'Deleting…';
+    try {
+      // Try music task delete endpoint first
+      let res = await fetch(`${API_BASE}/v1/music/tasks/${taskId}`, {
+        method: 'DELETE',
+        headers: { ...authHeaders() },
+      });
+
+      // Fall back to episodes bulk delete
+      if (res.status === 404 || res.status === 405) {
+        res = await fetch(`${API_BASE}/v1/episodes`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ ids: [taskId] }),
+        });
+      }
+
+      if (res.ok || res.status === 204) {
+        btn.closest('.history-card').style.opacity = '0.3';
+        btn.textContent = '✓ Deleted';
+      } else {
+        const j = await res.json().catch(() => ({}));
+        // If API doesn't support delete, just hide it locally
+        if (res.status === 404 || res.status === 405 || res.status === 403) {
+          btn.closest('.history-card').style.opacity = '0.3';
+          btn.textContent = '✓ Hidden';
+          // Store hidden IDs in localStorage
+          const hidden = JSON.parse(localStorage.getItem('lh_hidden') || '[]');
+          hidden.push(taskId);
+          localStorage.setItem('lh_hidden', JSON.stringify(hidden));
+        } else {
+          alert('Delete failed: ' + (j.message || res.status));
+          btn.disabled = false;
+          btn.textContent = '🗑 DELETE';
+        }
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = '🗑 DELETE';
+    }
+  }
+
   function renderHistory(items, page) {
     const container = document.getElementById('historyList');
     document.getElementById('historyPageLabel').textContent = `Page ${page}`;
     document.getElementById('historyPrev').disabled = page <= 1;
     document.getElementById('historyNext').disabled = items.length < HISTORY_PAGE_SIZE;
 
-    if (items.length === 0) {
+    // Filter locally hidden tasks
+    const hidden = JSON.parse(localStorage.getItem('lh_hidden') || '[]');
+    const visible = items.filter(t => !hidden.includes(t.id));
+
+    if (visible.length === 0) {
       container.innerHTML = '<div class="history-empty">No music tasks found.</div>';
       return;
     }
 
     container.innerHTML = '';
-    items.forEach((task, i) => {
+    visible.forEach((task, i) => {
       const card = document.createElement('div');
       card.className = 'history-card';
       card.style.animationDelay = `${i * 0.04}s`;
@@ -1117,6 +1273,7 @@
         </div>
         <div class="history-badge ${task.status}">${task.status.toUpperCase()}</div>
         ${tracksHtml}
+        <button class="history-delete-btn" onclick="deleteTask('${task.id}', this)">🗑 DELETE</button>
       `;
       container.appendChild(card);
     });
@@ -1237,7 +1394,7 @@
 
   async function uploadFile(file) {
     const ext = file.name.split('.').pop().toLowerCase();
-    const mimeMap = {mp3:'audio/mpeg',wav:'audio/wav',flac:'audio/flac',m4a:'audio/mp4',ogg:'audio/ogg',aac:'audio/aac'};
+    const mimeMap = {mp3:'audio/mpeg',wav:'audio/wav',flac:'audio/flac',m4a:'audio/x-m4a',ogg:'audio/ogg',aac:'audio/aac',mp4:'audio/mp4'};
     const contentType = mimeMap[ext] || file.type || 'audio/mpeg';
 
     // Use simple ASCII timestamped filename — avoids Chinese char encoding issues
@@ -1272,9 +1429,13 @@
     if (!proxyRes.ok) throw new Error(proxyData.error || ('Proxy failed: ' + proxyRes.status));
     setUploadProgress(100);
 
-    const pathname = new URL(fileUrl).pathname;
-    const uploadUrl = 'https://storage.googleapis.com' + decodeURIComponent(pathname);
-    console.log('uploadUrl:', uploadUrl);
+    // Try the presignedUrl base (without query params) as uploadUrl
+    // The server may need the exact GCS object URL from the presigned URL
+    const presignedBase = presignedUrl.split('?')[0]; // strip signature params
+    const pathnameFromPresigned = new URL(presignedBase).pathname;
+    const uploadUrl = 'https://storage.googleapis.com' + pathnameFromPresigned;
+    console.log('uploadUrl (from presigned):', uploadUrl);
+    console.log('uploadUrl (from fileUrl):', 'https://storage.googleapis.com' + new URL(fileUrl).pathname);
     return uploadUrl;
   }
 
