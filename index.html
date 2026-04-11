@@ -777,8 +777,10 @@
       <div class="token-bar">
         <div class="token-dot connected"></div>
         <span id="userLabel" style="flex:1;font-size:12px;color:var(--text)">Logged in</span>
+        <button id="checkinBtn" onclick="submitCheckin()" title="Daily check-in">✓ CHECK-IN</button>
         <button onclick="logout()">LOG OUT</button>
       </div>
+      <div id="checkinMsg" style="display:none;font-size:11px;padding:6px 16px;letter-spacing:0.05em"></div>
     </div>
   </div>
 
@@ -976,6 +978,43 @@
       const file = e.dataTransfer.files[0];
       if (file) setFile(file);
     });
+  }
+
+  // --- Check-in ---
+  async function submitCheckin() {
+    const btn = document.getElementById('checkinBtn');
+    const msg = document.getElementById('checkinMsg');
+    btn.disabled = true;
+    btn.textContent = '…';
+    msg.style.display = 'none';
+    try {
+      const data = await apiPost('/v1/checkin', { platform: 'listenhub' });
+      // Also fetch status for streak info
+      const status = await apiGet('/v1/checkin/status').catch(() => null);
+      btn.textContent = '✓ CHECK-IN';
+      msg.style.display = 'block';
+      msg.style.color = 'var(--accent)';
+      const streak = status?.streak ?? data?.streak ?? null;
+      const reward = data?.creditsRewarded ?? data?.reward ?? null;
+      let text = '✓ Check-in successful!';
+      if (streak) text += '  🔥 ' + streak + ' day streak';
+      if (reward) text += '  +' + reward + ' credits';
+      msg.textContent = text;
+      // Refresh credits after checkin
+      fetchSubscription();
+      setTimeout(() => { msg.style.display = 'none'; }, 5000);
+    } catch (err) {
+      btn.textContent = '✓ CHECK-IN';
+      btn.disabled = false;
+      msg.style.display = 'block';
+      msg.style.color = 'var(--accent2)';
+      msg.textContent = err.message.includes('already') || err.message.includes('checkin')
+        ? '✓ Already checked in today'
+        : 'Check-in failed: ' + err.message;
+      setTimeout(() => { msg.style.display = 'none'; }, 4000);
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   // --- Auth state ---
@@ -1524,3 +1563,4 @@
 </script>
 </body>
 </html>
+
