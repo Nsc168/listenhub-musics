@@ -568,6 +568,20 @@
   }
   .history-track-row a:hover { background: var(--accent); color: #0a0a0a; }
 
+  .dl-btn {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    background: none;
+    border: 1px solid var(--accent);
+    padding: 4px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+    font-family: 'DM Mono', monospace;
+  }
+  .dl-btn:hover { background: var(--accent); color: #0a0a0a; }
+
   .history-delete-btn {
     margin-top: 12px;
     font-family: 'DM Mono', monospace;
@@ -1191,6 +1205,36 @@
     }
   }
 
+  // --- Download ---
+  async function downloadTrack(audioUrl, filename) {
+    const proxyUrl = PROXY_URL.trim().replace(/\/$/, '');
+    if (!proxyUrl) {
+      // No proxy — try direct download as fallback
+      const a = document.createElement('a');
+      a.href = audioUrl;
+      a.download = filename;
+      a.target = '_blank';
+      a.click();
+      return;
+    }
+    try {
+      const dlUrl = `${proxyUrl}/download?url=${encodeURIComponent(audioUrl)}&filename=${encodeURIComponent(filename)}`;
+      const res = await fetch(dlUrl);
+      if (!res.ok) throw new Error('Download failed: ' + res.status);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+    } catch (err) {
+      alert('Download error: ' + err.message);
+    }
+  }
+
   // --- History ---
   let historyCurrentPage = 1;
   const HISTORY_PAGE_SIZE = 10;
@@ -1297,7 +1341,7 @@
           tracksHtml += `
             <div class="history-track-row">
               <span>${track.title || 'Track ' + (ti+1)} · ${formatDuration(track.duration)}</span>
-              <a href="${track.audioUrl}" download="${fname}" target="_blank">⬇ MP3</a>
+              <button class="dl-btn" onclick="downloadTrack('${track.audioUrl}', '${fname}')">⬇ MP3</button>
             </div>`;
         });
         tracksHtml += '</div>';
@@ -1393,7 +1437,7 @@
         <div class="track-tags">${track.tags || ''}</div>
         <audio controls src="${track.audioUrl}"></audio>
         <div class="track-duration">${formatDuration(track.duration)}</div>
-        <a class="download-btn" href="${track.audioUrl}" download="${filename}" target="_blank">⬇ DOWNLOAD MP3</a>
+        <button class="download-btn" onclick="downloadTrack('${track.audioUrl}', '${filename}')">⬇ DOWNLOAD MP3</button>
       `;
       container.appendChild(card);
     });
@@ -1563,4 +1607,3 @@
 </script>
 </body>
 </html>
-
