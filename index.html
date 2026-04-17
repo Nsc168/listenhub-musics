@@ -1035,7 +1035,8 @@
     if (code) {
       // Clean URL immediately
       window.history.replaceState({}, '', window.location.pathname);
-      oauthSessionId = sessionStorage.getItem('lh_session_id');
+      oauthSessionId = sessionStorage.getItem('lh_session_id') || localStorage.getItem('lh_session_id');
+      localStorage.removeItem('lh_session_id');
       if (oauthSessionId) {
         exchangeCode(code);
         return;
@@ -1197,17 +1198,7 @@
     btn.disabled = true;
     btn.textContent = 'CONNECTING…';
     hideError();
-
-    // Open a blank window synchronously (in the click event stack) to avoid
-    // browser popup blockers, which block window.open() called after an await.
-    const loginWindow = window.open('', '_blank');
-
     try {
-      // Use port 9999 — we don't actually run a server,
-      // but the API requires port >= 1024. After login,
-      // ListenHub redirects to http://localhost:9999/?code=XXX
-      // which fails to load (no server), but the user can copy
-      // the code from the URL bar and paste it below.
       const res = await fetch(`${API_BASE}/v1/auth/connect/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1217,17 +1208,18 @@
       if (!res.ok || json.code !== 0) throw new Error(json.message || 'Failed to init OAuth');
       const { sessionId, authUrl } = json.data;
 
+      // Use localStorage so sessionId survives navigation (sessionStorage is
+      // cleared when the tab navigates away, which breaks mobile browsers that
+      // don't support window.open).
+      localStorage.setItem('lh_session_id', sessionId);
       sessionStorage.setItem('lh_session_id', sessionId);
       oauthSessionId = sessionId;
 
-      // Show the waiting/code-entry box
-      document.getElementById('oauthWaiting').classList.add('visible');
-      document.getElementById('loginBox').style.display = 'none';
-
-      // Navigate the already-opened window to the real auth URL
-      loginWindow.location.href = authUrl;
+      // Navigate current tab to authUrl — works on all browsers including mobile.
+      // After login, ListenHub redirects back to this page with ?code=XXX and
+      // init() will pick it up automatically.
+      window.location.href = authUrl;
     } catch (err) {
-      if (loginWindow) loginWindow.close();
       showError(`Login error: ${err.message}`);
       btn.disabled = false;
       btn.textContent = 'LOG IN WITH LISTENHUB';
