@@ -597,6 +597,12 @@
   .history-delete-btn:hover { background: var(--accent2); color: #fff; }
   .history-delete-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+  select {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  select:focus { border-color: var(--accent) !important; }
+
   /* Download button */
   .download-btn {
     display: inline-block;
@@ -832,15 +838,12 @@
   <!-- OAuth waiting for code -->
   <div class="oauth-waiting" id="oauthWaiting">
     <div class="oauth-waiting-title">COMPLETE LOGIN</div>
-    <a id="oauthOpenBtn" href="#" target="_blank" style="display:none;margin-bottom:14px;padding:12px 20px;background:var(--accent);color:#0a0a0a;font-family:Bebas Neue,sans-serif;font-size:18px;letter-spacing:0.1em;text-decoration:none;text-align:center">
-      👉 TAP HERE TO OPEN LOGIN PAGE
-    </a>
     <div class="oauth-waiting-text">
-      Tap the button above to open ListenHub login.<br><br>
-      After logging in, the browser redirects to a page that <strong>fails to load</strong> — that's normal!<br><br>
+      A ListenHub login page has opened in a new tab.<br><br>
+      After you log in, the browser will redirect to a page that <strong>fails to load</strong> — that's normal!<br><br>
       Look at the URL bar — it will look like:<br>
       <code style="color:var(--accent);word-break:break-all">http://localhost:9999/?code=<strong>XXXXXX</strong></code><br><br>
-      Copy the <strong>code value</strong> (after <code>code=</code>) and paste below:
+      Copy just the <strong>code value</strong> (after <code>code=</code>) and paste it below:
     </div>
     <div class="oauth-code-row">
       <input type="text" id="oauthCodeInput" placeholder="Paste code here…">
@@ -852,6 +855,8 @@
   <div class="tabs">
     <button class="tab-btn active" onclick="switchTab('generate')">GENERATE</button>
     <button class="tab-btn" onclick="switchTab('cover')">COVER</button>
+    <button class="tab-btn" onclick="switchTab('extend')">EXTEND</button>
+    <button class="tab-btn" onclick="switchTab('lyrics')">LYRICS</button>
     <button class="tab-btn" onclick="switchTab('history')">HISTORY</button>
   </div>
 
@@ -914,6 +919,68 @@
       <span class="toggle-label">Instrumental only (no vocals)</span>
     </label>
     <button class="submit-btn" id="coverBtn" onclick="createCover()">CREATE COVER</button>
+  </div>
+
+  <!-- Extend Panel -->
+  <div class="tab-panel" id="panel-extend">
+    <div class="form-group">
+      <label>Reference Audio *</label>
+      <div class="drop-zone" id="dropZoneExtend">
+        <input type="file" id="audioFileExtend" accept=".mp3,.wav,.flac,.m4a,.ogg,.aac" onchange="onExtendFileSelected(this)">
+        <span class="drop-icon">♫</span>
+        <div class="drop-label"><strong>Drop audio file here</strong> or click to browse</div>
+        <div class="drop-label" style="margin-top:6px">mp3, wav, flac, m4a, ogg, aac · max 20MB</div>
+      </div>
+      <div class="file-selected" id="fileSelectedExtend"></div>
+    </div>
+    <div class="row">
+      <div class="form-group">
+        <label>Model *</label>
+        <select id="extendModel" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:DM Mono,monospace;font-size:13px;padding:14px 16px;outline:none">
+          <option value="V4_5">V4.5</option>
+          <option value="V4_5PLUS">V4.5 Plus</option>
+          <option value="V4_5ALL">V4.5 All</option>
+          <option value="V5" selected>V5</option>
+          <option value="V5_5">V5.5</option>
+          <option value="V4">V4</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Continue At (seconds) *</label>
+        <input type="number" id="extendContinueAt" placeholder="e.g. 30" min="0" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:DM Mono,monospace;font-size:13px;padding:14px 16px;outline:none">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Prompt <span style="color:var(--muted);font-size:9px">(optional)</span></label>
+      <textarea id="extendPrompt" placeholder="Continue with a dramatic orchestral swell…"></textarea>
+    </div>
+    <div class="row">
+      <div class="form-group">
+        <label>Style / Genre</label>
+        <input type="text" id="extendStyle" placeholder="orchestral, jazz…">
+      </div>
+      <div class="form-group">
+        <label>Track Title</label>
+        <input type="text" id="extendTitle" placeholder="My Extended Track">
+      </div>
+    </div>
+    <label class="toggle-row" for="extendInstrumental">
+      <input type="checkbox" id="extendInstrumental">
+      <span class="toggle-track"></span>
+      <span class="toggle-label">Instrumental only (no vocals)</span>
+    </label>
+    <button class="submit-btn" id="extendBtn" onclick="createExtend()">EXTEND MUSIC</button>
+  </div>
+
+  <!-- Lyrics Panel -->
+  <div class="tab-panel" id="panel-lyrics">
+    <div class="form-group">
+      <label>Prompt * <span style="color:var(--muted);font-size:9px">max 200 chars</span></label>
+      <textarea id="lyricsPrompt" placeholder="A heartfelt Mandarin pop ballad about missing someone far away…" maxlength="200"></textarea>
+      <div id="lyricsCharCount" style="font-size:10px;color:var(--muted);text-align:right;margin-top:4px">0 / 200</div>
+    </div>
+    <button class="submit-btn" id="lyricsBtn" onclick="generateLyrics()">GENERATE LYRICS</button>
+    <div id="lyricsResults" style="margin-top:24px"></div>
   </div>
 
   <!-- History Panel -->
@@ -985,7 +1052,7 @@
       input.addEventListener('input', () => { accessToken = input.value.trim(); });
     }
 
-    // Drag and drop
+    // Drag and drop — cover
     const zone = document.getElementById('dropZone');
     zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
     zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
@@ -994,6 +1061,25 @@
       zone.classList.remove('drag-over');
       const file = e.dataTransfer.files[0];
       if (file) setFile(file);
+    });
+
+    // Drag and drop — extend
+    const zoneE = document.getElementById('dropZoneExtend');
+    if (zoneE) {
+      zoneE.addEventListener('dragover', e => { e.preventDefault(); zoneE.classList.add('drag-over'); });
+      zoneE.addEventListener('dragleave', () => zoneE.classList.remove('drag-over'));
+      zoneE.addEventListener('drop', e => {
+        e.preventDefault();
+        zoneE.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file) setExtendFile(file);
+      });
+    }
+
+    // Lyrics char counter
+    const lp = document.getElementById('lyricsPrompt');
+    if (lp) lp.addEventListener('input', () => {
+      document.getElementById('lyricsCharCount').textContent = lp.value.length + ' / 200';
     });
   }
 
@@ -1111,6 +1197,11 @@
     btn.disabled = true;
     btn.textContent = 'CONNECTING…';
     hideError();
+
+    // Open a blank window synchronously (in the click event stack) to avoid
+    // browser popup blockers, which block window.open() called after an await.
+    const loginWindow = window.open('', '_blank');
+
     try {
       // Use port 9999 — we don't actually run a server,
       // but the API requires port >= 1024. After login,
@@ -1133,11 +1224,10 @@
       document.getElementById('oauthWaiting').classList.add('visible');
       document.getElementById('loginBox').style.display = 'none';
 
-      // Set a direct tap-to-open link (window.open is blocked on mobile unless user-triggered)
-      const openBtn = document.getElementById('oauthOpenBtn');
-      openBtn.href = authUrl;
-      openBtn.style.display = 'inline-block';
+      // Navigate the already-opened window to the real auth URL
+      loginWindow.location.href = authUrl;
     } catch (err) {
+      if (loginWindow) loginWindow.close();
       showError(`Login error: ${err.message}`);
       btn.disabled = false;
       btn.textContent = 'LOG IN WITH LISTENHUB';
@@ -1189,21 +1279,22 @@
   // --- Tabs ---
   function switchTab(tab) {
     activeTab = tab;
+    const tabNames = ['generate','cover','extend','lyrics','history'];
     document.querySelectorAll('.tab-btn').forEach((b, i) => {
-      b.classList.toggle('active', ['generate','cover','history'][i] === tab);
+      b.classList.toggle('active', tabNames[i] === tab);
     });
     document.querySelectorAll('.tab-panel').forEach(p => {
-      p.classList.toggle('active', p.id === `panel-${tab}`);
+      p.classList.toggle('active', p.id === 'panel-' + tab);
     });
     hideError();
     hideStatus();
     document.getElementById('results').innerHTML = '';
     if (tab === 'history' && accessToken) loadHistory();
-    // Show proxy config bar on cover tab
+    // Show proxy bar on cover or extend tab
     const proxyBar = document.getElementById('proxyBar');
     if (proxyBar) {
-      proxyBar.style.display = tab === 'cover' ? 'block' : 'none';
-      if (tab === 'cover') {
+      proxyBar.style.display = (tab === 'cover' || tab === 'extend') ? 'block' : 'none';
+      if (tab === 'cover' || tab === 'extend') {
         const proxyInput = document.getElementById('proxyInput');
         if (proxyInput && PROXY_URL) proxyInput.value = PROXY_URL;
       }
@@ -1329,7 +1420,7 @@
           tracksHtml += `
             <div class="history-track-row">
               <span>${track.title || 'Track ' + (ti+1)} · ${formatDuration(track.duration)}</span>
-              <button class="dl-btn" onclick="downloadTrack('${track.audioUrl}', '${fname}')">⬇ MP3</button>
+              <button class="dl-btn" onclick="refreshAndDownload('${track.audioUrl}', '${fname}')">⬇ MP3</button>
             </div>`;
         });
         tracksHtml += '</div>';
@@ -1553,6 +1644,130 @@
       showError(`Error: ${err.message}`);
     } finally {
       setLoading('submitBtn', false, '', 'GENERATE MUSIC');
+    }
+  }
+
+  // --- Extend file ---
+  let selectedExtendFile = null;
+  function onExtendFileSelected(input) { if (input.files[0]) setExtendFile(input.files[0]); }
+  function setExtendFile(file) {
+    if (file.size > 20*1024*1024) { showError('File too large (max 20MB).'); return; }
+    selectedExtendFile = file;
+    document.getElementById('fileSelectedExtend').textContent = '✓ ' + file.name + ' (' + (file.size/1024/1024).toFixed(2) + ' MB)';
+  }
+
+  // --- Extend ---
+  async function createExtend() {
+    hideError();
+    document.getElementById('results').innerHTML = '';
+    if (!accessToken) { showError('Please log in first.'); return; }
+    if (!selectedExtendFile) { showError('Please select a reference audio file.'); return; }
+    const continueAt = parseFloat(document.getElementById('extendContinueAt').value);
+    if (isNaN(continueAt)) { showError('Continue At (seconds) is required.'); return; }
+    const model = document.getElementById('extendModel').value;
+    const prompt = document.getElementById('extendPrompt').value.trim();
+    const style = document.getElementById('extendStyle').value.trim();
+    const title = document.getElementById('extendTitle').value.trim();
+    const instrumental = document.getElementById('extendInstrumental').checked;
+
+    setLoading('extendBtn', true, 'UPLOADING…', 'EXTEND MUSIC');
+    setStatus('Uploading audio file…');
+    try {
+      const uploadUrl = await uploadFile(selectedExtendFile);
+      setStatus('Submitting extend task…');
+      setLoading('extendBtn', true, 'GENERATING…', 'EXTEND MUSIC');
+      const body = { uploadUrl, model, continueAt, provider: 'default',
+        ...(prompt && {prompt}), ...(style && {style}), ...(title && {title}),
+        ...(instrumental && {instrumental: true}) };
+      const result = await apiPost('/v1/music/extend', body);
+      setTaskId(result.taskId);
+      setStatus('Extend submitted. Generating…');
+      const task = await pollUntilDone(result.taskId);
+      hideStatus();
+      renderResults(task.tracks);
+    } catch (err) {
+      hideStatus();
+      showError('Error: ' + err.message);
+    } finally {
+      setLoading('extendBtn', false, '', 'EXTEND MUSIC');
+    }
+  }
+
+  // --- Lyrics ---
+  async function generateLyrics() {
+    hideError();
+    const resultsEl = document.getElementById('lyricsResults');
+    resultsEl.innerHTML = '';
+    if (!accessToken) { showError('Please log in first.'); return; }
+    const prompt = document.getElementById('lyricsPrompt').value.trim();
+    if (!prompt) { showError('Prompt is required.'); return; }
+
+    setLoading('lyricsBtn', true, 'GENERATING…', 'GENERATE LYRICS');
+    setStatus('Generating lyrics…');
+    try {
+      const result = await apiPost('/v1/lyrics/generate', { prompt });
+      setStatus('Polling for lyrics…');
+      // Poll for completion
+      const start = Date.now();
+      let task;
+      while (Date.now() - start < 120_000) {
+        await new Promise(r => setTimeout(r, 4000));
+        task = await apiGet('/v1/lyrics/tasks/' + result.taskId);
+        setStatus('Status: ' + task.status + '…');
+        if (task.status === 'success' || task.status === 'failed') break;
+      }
+      hideStatus();
+      if (!task || task.status === 'failed') throw new Error(task?.errorMessage || 'Lyrics generation failed');
+      renderLyrics(task.variants);
+    } catch (err) {
+      hideStatus();
+      showError('Error: ' + err.message);
+    } finally {
+      setLoading('lyricsBtn', false, '', 'GENERATE LYRICS');
+    }
+  }
+
+  function renderLyrics(variants) {
+    const el = document.getElementById('lyricsResults');
+    el.innerHTML = '<div class="results-header"><span class="tick">✓</span> ' + variants.length + ' Variant' + (variants.length !== 1 ? 's' : '') + '</div>';
+    variants.forEach((v, i) => {
+      const card = document.createElement('div');
+      card.className = 'track-card';
+      card.style.animationDelay = (i * 0.08) + 's';
+      const lines = (v.text || '').replace(/</g, '&lt;').replace(/
+/g, '<br>');
+      card.innerHTML = '<div class="track-title">' + (v.title || 'Variant ' + (i+1)) + '</div>' +
+        '<div style="font-size:12px;line-height:1.8;color:var(--muted);margin-top:10px;white-space:pre-wrap">' + lines + '</div>' +
+        '<button class="download-btn" style="margin-top:12px" onclick="copyLyrics(this, ' + JSON.stringify(v.text) + ')">📋 COPY LYRICS</button>';
+      el.appendChild(card);
+    });
+  }
+
+  function copyLyrics(btn, text) {
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = '✓ COPIED!';
+      setTimeout(() => btn.textContent = '📋 COPY LYRICS', 2000);
+    }).catch(() => {
+      // Fallback
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      btn.textContent = '✓ COPIED!';
+      setTimeout(() => btn.textContent = '📋 COPY LYRICS', 2000);
+    });
+  }
+
+  // --- Refresh expired download URL ---
+  async function refreshAndDownload(audioUrl, filename) {
+    try {
+      const data = await apiGet('/v1/files?fileUrl=' + encodeURIComponent(audioUrl));
+      const freshUrl = data.downloadUrl || audioUrl;
+      downloadTrack(freshUrl, filename);
+    } catch {
+      downloadTrack(audioUrl, filename);
     }
   }
 
